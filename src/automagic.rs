@@ -8,6 +8,7 @@ use crate::{
     config::Config,
     hass_client,
     model::{EventData, HassRequest, HassResponse},
+    CHANNEL_SIZE,
 };
 
 const API_WEBSOCKET: &str = "/api/websocket";
@@ -33,7 +34,8 @@ impl Automagic {
         msg_rx: mpsc::Receiver<AutomagicMessage>,
         resp_rx: mpsc::Receiver<HassResponse>,
     ) -> Self {
-        let (event_tx, _) = broadcast::channel(10);
+        // don't use the global BUFFER_SIZE as it could prevent automations from receiving events
+        let (event_tx, _) = broadcast::channel(32);
         Automagic {
             config,
             req_tx,
@@ -113,8 +115,8 @@ impl AutomagicHandle {
 pub fn start(config_path: &str) -> (AutomagicHandle, JoinHandle<()>) {
     let config = Config::new(config_path);
 
-    let (auto_tx, auto_rx) = mpsc::channel(10);
-    let (resp_tx, resp_rx) = mpsc::channel(10);
+    let (auto_tx, auto_rx) = mpsc::channel(CHANNEL_SIZE);
+    let (resp_tx, resp_rx) = mpsc::channel(CHANNEL_SIZE);
 
     let (req_tx, hassclient_task) =
         hass_client::start(format!("{}{}", config.url.clone(), API_WEBSOCKET), resp_tx);

@@ -10,7 +10,10 @@ use tokio_util::sync::CancellationToken;
 use tracing::{debug, error, info, trace, warn};
 use url::Url;
 
-use crate::model::{HassRequest, HassResponse};
+use crate::{
+    model::{HassRequest, HassResponse},
+    CHANNEL_SIZE,
+};
 
 type WebSocket = WebSocketStream<MaybeTlsStream<TcpStream>>;
 
@@ -106,7 +109,7 @@ fn start_loops(
     resp_tx: mpsc::Sender<HassResponse>,
 ) -> (mpsc::Sender<HassRequest>, JoinHandle<()>) {
     let (ws_tx, ws_rx) = ws.split();
-    let (req_tx, req_rx) = mpsc::channel(200);
+    let (req_tx, req_rx) = mpsc::channel(CHANNEL_SIZE);
 
     let handle = tokio::spawn({
         let ct = CancellationToken::new();

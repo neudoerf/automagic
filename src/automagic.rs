@@ -63,12 +63,13 @@ impl Automagic {
         }
     }
 
-    async fn handle_response(&self, response: HassResponse) {
+    async fn handle_response(&mut self, response: HassResponse) {
         debug!("{:?}", response);
         match response {
             HassResponse::AuthRequired(_) => self.send_auth().await,
             HassResponse::AuthOk(_) => {
                 info!("auth successful");
+                self.subscribe_events().await;
             }
             HassResponse::AuthInvalid(_) => {
                 error!("auth invalid");
@@ -92,6 +93,24 @@ impl Automagic {
                 access_token: self.config.access_token.clone(),
             }))
             .await;
+    }
+
+    async fn subscribe_events(&mut self) {
+        let id = self.get_id();
+        let _ = self
+            .req_tx
+            .send(HassRequest::SubscribeEvents(
+                crate::model::SubscribeEvents {
+                    id,
+                    event_type: Some("state_changed".to_owned()),
+                },
+            ))
+            .await;
+    }
+
+    fn get_id(&mut self) -> u64 {
+        self.id += 1;
+        self.id
     }
 }
 

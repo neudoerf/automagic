@@ -38,7 +38,7 @@ async fn tx_loop(
                     }
                     Ok(None) => {
                         info!("connection closed");
-                        ct.cancel();
+                        break;
                     }
                     Err(_) => {
                         if let Err(_) = tx.send(Message::Ping(vec![])).await {

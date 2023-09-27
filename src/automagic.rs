@@ -1,5 +1,6 @@
+use serde_json::Value;
 use tokio::{
-    sync::{broadcast, mpsc},
+    sync::{broadcast, mpsc, oneshot},
     task::JoinHandle,
 };
 use tracing::{debug, error, info};
@@ -7,14 +8,24 @@ use tracing::{debug, error, info};
 use crate::{
     config::Config,
     hass_client,
-    model::{EventData, HassRequest, HassResponse},
+    model::{CallService, EventData, HassRequest, HassResponse, Target},
     CHANNEL_SIZE,
 };
 
 const API_WEBSOCKET: &str = "/api/websocket";
 
 #[derive(Debug)]
-pub enum AutomagicMessage {}
+pub enum AutomagicMessage {
+    CallService {
+        domain: String,
+        service: String,
+        service_data: Option<Value>,
+        target: Option<Target>,
+    },
+    SubscribeEvents {
+        tx: oneshot::Sender<broadcast::Receiver<EventData>>,
+    },
+}
 
 struct Automagic {
     config: Config,
@@ -56,7 +67,7 @@ impl Automagic {
                 }
                 message = self.msg_rx.recv() => {
                     if let Some(message) = message {
-                        self.handle_message(message);
+                        self.handle_message(message).await;
                     }
                 }
             }
@@ -77,13 +88,27 @@ impl Automagic {
             HassResponse::Event(e) => {
                 let _ = self.event_tx.send(e.event.data);
             }
-            HassResponse::Result(r) => {}
+            HassResponse::Result(_) => {}
             _ => {}
         }
     }
 
-    fn handle_message(&self, message: AutomagicMessage) {
-        debug!("{:?}", message)
+    async fn handle_message(&mut self, message: AutomagicMessage) {
+        debug!("{:?}", message);
+        match message {
+            AutomagicMessage::CallService {
+                domain,
+                service,
+                service_data,
+                target,
+            } => {
+                self.call_service(domain, service, service_data, target)
+                    .await;
+            }
+            AutomagicMessage::SubscribeEvents { tx } => {
+                let _ = tx.send(self.event_tx.subscribe());
+            }
+        };
     }
 
     async fn send_auth(&self) {
@@ -108,12 +133,32 @@ impl Automagic {
             .await;
     }
 
+    async fn call_service(
+        &mut self,
+        domain: String,
+        service: String,
+        service_data: Option<Value>,
+        target: Option<Target>,
+    ) {
+        let id = self.get_id();
+        let c = CallService {
+            id,
+            service_type: "call_service".to_owned(),
+            domain,
+            service,
+            service_data,
+            target,
+        };
+        let _ = self.req_tx.send(HassRequest::CallService(c)).await;
+    }
+
     fn get_id(&mut self) -> u64 {
         self.id += 1;
         self.id
     }
 }
 
+#[derive(Clone)]
 pub struct AutomagicHandle {
     tx: mpsc::Sender<AutomagicMessage>,
 }

@@ -78,6 +78,21 @@ where
     })
 }
 
+pub fn run_interval<T>(message: T, message_tx: mpsc::Sender<T>, period: Duration) -> JoinHandle<()>
+where
+    T: Send + Sync + Clone + 'static,
+{
+    let mut i = interval(period);
+    tokio::spawn(async move {
+        loop {
+            i.tick().await;
+            if let Err(_) = message_tx.send(message.clone()).await {
+                break;
+            }
+        }
+    })
+}
+
 fn time_is_between(start: DateTime<Local>, end: DateTime<Local>, time: NaiveTime) -> bool {
     (start.time() < time && time <= end.time()) || (start.time() > end.time() && time <= end.time())
 }

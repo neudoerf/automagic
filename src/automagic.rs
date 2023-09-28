@@ -5,13 +5,12 @@ use tokio::{
     sync::{broadcast, mpsc, oneshot},
     task::JoinHandle,
 };
-use tracing::{debug, error, info};
+use tracing::{error, info, trace};
 
 use crate::{
     config::Config,
     hass_client,
     model::{CallService, EventData, HassRequest, HassResponse, Target},
-    time::{self, TimeHandle},
     CHANNEL_SIZE,
 };
 
@@ -79,7 +78,7 @@ impl Automagic {
     }
 
     async fn handle_response(&mut self, response: HassResponse) {
-        debug!("{:?}", response);
+        trace!("{:?}", response);
         match response {
             HassResponse::AuthRequired(_) => self.send_auth().await,
             HassResponse::AuthOk(_) => {
@@ -98,7 +97,7 @@ impl Automagic {
     }
 
     async fn handle_message(&mut self, message: AutomagicMessage) {
-        debug!("{:?}", message);
+        trace!("{:?}", message);
         match message {
             AutomagicMessage::CallService {
                 domain,
@@ -165,12 +164,11 @@ impl Automagic {
 #[derive(Clone)]
 pub struct AutomagicHandle {
     tx: mpsc::Sender<AutomagicMessage>,
-    pub time: TimeHandle,
 }
 
 impl AutomagicHandle {
-    fn new(tx: mpsc::Sender<AutomagicMessage>, time: TimeHandle) -> Self {
-        Self { tx, time }
+    fn new(tx: mpsc::Sender<AutomagicMessage>) -> Self {
+        Self { tx }
     }
 
     pub async fn send(
@@ -197,7 +195,5 @@ pub fn start(config_path: &str) -> (AutomagicHandle, JoinHandle<()>) {
         let _ = tokio::join!(hassclient_task, automagic_task);
     });
 
-    let t = time::start();
-
-    (AutomagicHandle::new(auto_tx, t), task)
+    (AutomagicHandle::new(auto_tx), task)
 }

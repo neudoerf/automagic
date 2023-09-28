@@ -3,6 +3,7 @@ use std::time::Duration;
 use automagic::{
     automation::{self, Automation},
     model::{EventData, Target},
+    time::run_in,
     AutomagicHandle, AutomagicMessage,
 };
 use tokio::{sync::mpsc, task::JoinHandle};
@@ -62,7 +63,7 @@ impl Automation for TestAutomation {
                         error!("failed to send command to automagic");
                     }
                 } else {
-                    self.handle = Some(self.automagic.time.run_in(
+                    self.handle = Some(run_in(
                         TestMessage::LightOff,
                         self.message_tx.clone(),
                         Duration::from_secs(10),

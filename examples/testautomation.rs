@@ -2,9 +2,9 @@ use std::time::Duration;
 
 use automagic::{
     automation::{self, Automation},
-    model::{EventData, Target},
+    model::EventData,
     time::run_in,
-    AutomagicHandle, AutomagicMessage,
+    AutomagicHandle,
 };
 use tokio::{sync::mpsc, task::JoinHandle};
 use tracing::{error, Level};
@@ -51,15 +51,11 @@ impl Automation for TestAutomation {
                     self.handle = None;
                 }
                 if state.state == "on" {
-                    let msg = AutomagicMessage::CallService {
-                        domain: "light".to_owned(),
-                        service: "turn_on".to_owned(),
-                        service_data: None,
-                        target: Some(Target {
-                            entity_id: self.entity.clone(),
-                        }),
-                    };
-                    if let Err(_) = self.automagic.send(msg).await {
+                    if let Err(_) = self
+                        .automagic
+                        .call_service("light", "turn_on", None, Some(&self.entity.clone()))
+                        .await
+                    {
                         error!("failed to send command to automagic");
                     }
                 } else {
@@ -76,15 +72,11 @@ impl Automation for TestAutomation {
     async fn handle_message(&mut self, message: TestMessage) {
         match message {
             TestMessage::LightOff => {
-                let msg = AutomagicMessage::CallService {
-                    domain: "light".to_owned(),
-                    service: "turn_off".to_owned(),
-                    service_data: None,
-                    target: Some(Target {
-                        entity_id: self.entity.clone(),
-                    }),
-                };
-                if let Err(_) = self.automagic.send(msg).await {
+                if let Err(_) = self
+                    .automagic
+                    .call_service("light", "turn_off", None, Some(&self.entity.clone()))
+                    .await
+                {
                     error!("failed to send command to automagic");
                 }
             }

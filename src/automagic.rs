@@ -177,6 +177,27 @@ impl AutomagicHandle {
     ) -> Result<(), mpsc::error::SendError<AutomagicMessage>> {
         self.tx.send(m).await
     }
+
+    pub async fn call_service(
+        &self,
+        domain: &str,
+        service: &str,
+        service_data: Option<Value>,
+        target: Option<&str>,
+    ) -> Result<(), mpsc::error::SendError<AutomagicMessage>> {
+        self.tx
+            .send(AutomagicMessage::CallService {
+                domain: domain.to_owned(),
+                service: service.to_owned(),
+                service_data,
+                target: target.and_then(|t| {
+                    Some(Target {
+                        entity_id: t.to_owned(),
+                    })
+                }),
+            })
+            .await
+    }
 }
 
 pub fn start(config_path: &str) -> (AutomagicHandle, JoinHandle<()>) {

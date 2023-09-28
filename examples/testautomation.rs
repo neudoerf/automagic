@@ -42,6 +42,8 @@ impl TestAutomation {
 impl Automation for TestAutomation {
     type AutomationMessage = TestMessage;
 
+    fn init(&mut self) {}
+
     async fn handle_event(&mut self, event_data: EventData) {
         if event_data.entity_id == self.trigger {
             if let Some(state) = event_data.new_state {

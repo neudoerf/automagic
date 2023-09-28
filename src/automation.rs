@@ -12,6 +12,8 @@ use crate::{
 pub trait Automation {
     type AutomationMessage: Send;
 
+    fn init(&mut self);
+
     async fn handle_event(&mut self, event: EventData);
 
     async fn handle_message(&mut self, message: Self::AutomationMessage);
@@ -44,6 +46,7 @@ impl<T: Automation + Send> AutomagicAutomation<T> {
     }
 
     async fn run(&mut self) {
+        self.automation.init();
         loop {
             tokio::select! {
                 Ok(event) = self.event_rx.recv() => {

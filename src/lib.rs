@@ -3,6 +3,7 @@ pub mod automation;
 mod config;
 mod hass_client;
 pub mod model;
+pub mod time;
 
 pub use automagic::start;
 pub use automagic::AutomagicHandle;

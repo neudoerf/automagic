@@ -1,3 +1,5 @@
+use std::cmp;
+
 use serde_json::Value;
 use tokio::{
     sync::{broadcast, mpsc, oneshot},
@@ -9,6 +11,7 @@ use crate::{
     config::Config,
     hass_client,
     model::{CallService, EventData, HassRequest, HassResponse, Target},
+    time::{self, TimeHandle},
     CHANNEL_SIZE,
 };
 
@@ -45,8 +48,9 @@ impl Automagic {
         msg_rx: mpsc::Receiver<AutomagicMessage>,
         resp_rx: mpsc::Receiver<HassResponse>,
     ) -> Self {
-        // don't use the global BUFFER_SIZE as it could prevent automations from receiving events
-        let (event_tx, _) = broadcast::channel(32);
+        // need to be careful with small channel sizes as a burst of events could flood the channel
+        // and cause events to be pushed out the end of the channel before automations can process them
+        let (event_tx, _) = broadcast::channel(cmp::max(CHANNEL_SIZE, 32));
         Automagic {
             config,
             req_tx,
@@ -161,11 +165,12 @@ impl Automagic {
 #[derive(Clone)]
 pub struct AutomagicHandle {
     tx: mpsc::Sender<AutomagicMessage>,
+    pub time: TimeHandle,
 }
 
 impl AutomagicHandle {
-    fn new(tx: mpsc::Sender<AutomagicMessage>) -> Self {
-        Self { tx }
+    fn new(tx: mpsc::Sender<AutomagicMessage>, time: TimeHandle) -> Self {
+        Self { tx, time }
     }
 
     pub async fn send(
@@ -192,5 +197,7 @@ pub fn start(config_path: &str) -> (AutomagicHandle, JoinHandle<()>) {
         let _ = tokio::join!(hassclient_task, automagic_task);
     });
 
-    (AutomagicHandle::new(auto_tx), task)
+    let t = time::start();
+
+    (AutomagicHandle::new(auto_tx, t), task)
 }

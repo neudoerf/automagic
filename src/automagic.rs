@@ -1,16 +1,16 @@
-use std::cmp;
+use std::{cmp, collections::HashMap};
 
 use serde_json::Value;
 use tokio::{
     sync::{broadcast, mpsc, oneshot},
     task::JoinHandle,
 };
-use tracing::{error, info, trace};
+use tracing::{debug, error, info, trace, warn};
 
 use crate::{
     config::Config,
     hass_client,
-    model::{CallService, EventData, HassRequest, HassResponse, Target},
+    model::{CallService, EventData, GetStates, HassEntity, HassRequest, HassResponse, Target},
     CHANNEL_SIZE,
 };
 
@@ -27,6 +27,10 @@ pub enum AutomagicMessage {
     SubscribeEvents {
         tx: oneshot::Sender<broadcast::Receiver<EventData>>,
     },
+    GetState {
+        entity_id: String,
+        tx: oneshot::Sender<Option<HassEntity>>,
+    },
 }
 
 struct Automagic {
@@ -38,6 +42,8 @@ struct Automagic {
     resp_rx: mpsc::Receiver<HassResponse>,
 
     id: u64,
+    states: HashMap<String, HassEntity>,
+    get_states_id: Option<u64>,
 }
 
 impl Automagic {
@@ -57,6 +63,8 @@ impl Automagic {
             msg_rx,
             resp_rx,
             id: 0,
+            states: HashMap::new(),
+            get_states_id: None,
         }
     }
 
@@ -84,6 +92,7 @@ impl Automagic {
             HassResponse::AuthOk(_) => {
                 info!("auth successful");
                 self.subscribe_events().await;
+                self.fetch_states().await;
             }
             HassResponse::AuthInvalid(_) => {
                 error!("auth invalid");
@@ -91,7 +100,26 @@ impl Automagic {
             HassResponse::Event(e) => {
                 let _ = self.event_tx.send(e.event.data);
             }
-            HassResponse::Result(_) => {}
+            HassResponse::Result(r) => {
+                if self.get_states_id.is_some_and(|id| id == r.id) {
+                    match r.result {
+                        Some(Value::Array(states)) => {
+                            debug!("received states");
+                            for state in states {
+                                if let Ok(state) =
+                                    serde_json::from_value::<HassEntity>(state.clone())
+                                {
+                                    self.states.insert(state.entity_id.clone(), state);
+                                } else {
+                                    warn!("unable to parse state: {:#?}", state);
+                                }
+                            }
+                        }
+                        _ => {}
+                    }
+                    self.get_states_id = None;
+                }
+            }
             _ => {}
         }
     }
@@ -110,6 +138,9 @@ impl Automagic {
             }
             AutomagicMessage::SubscribeEvents { tx } => {
                 let _ = tx.send(self.event_tx.subscribe());
+            }
+            AutomagicMessage::GetState { entity_id, tx } => {
+                let _ = tx.send(self.get_state(entity_id));
             }
         };
     }
@@ -136,6 +167,18 @@ impl Automagic {
             .await;
     }
 
+    async fn fetch_states(&mut self) {
+        let id = self.get_id();
+        let _ = self
+            .req_tx
+            .send(HassRequest::GetStates(GetStates {
+                id,
+                command_type: "get_states".to_owned(),
+            }))
+            .await;
+        self.get_states_id = Some(id);
+    }
+
     async fn call_service(
         &mut self,
         domain: String,
@@ -158,6 +201,10 @@ impl Automagic {
     fn get_id(&mut self) -> u64 {
         self.id += 1;
         self.id
+    }
+
+    fn get_state(&self, entity_id: String) -> Option<HassEntity> {
+        self.states.get(&entity_id).cloned()
     }
 }
 
@@ -197,6 +244,22 @@ impl AutomagicHandle {
                 }),
             })
             .await
+    }
+
+    pub async fn get_state(&self, entityid: &str) -> Option<HassEntity> {
+        let (tx, rx) = oneshot::channel();
+        if let Ok(_) = self
+            .tx
+            .send(AutomagicMessage::GetState {
+                entity_id: entityid.to_owned(),
+                tx,
+            })
+            .await
+        {
+            rx.await.unwrap_or(None)
+        } else {
+            None
+        }
     }
 }
 

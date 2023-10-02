@@ -1,6 +1,7 @@
+use core::fmt::Debug;
 use std::time::Duration;
 
-use chrono::{DateTime, Local, NaiveTime};
+use chrono::{DateTime, Datelike, Local, NaiveTime, Weekday};
 use tokio::{sync::mpsc, task::JoinHandle, time::interval};
 use tracing::{debug, warn};
 
@@ -11,18 +12,25 @@ struct Daily<T> {
     time: NaiveTime,
     message: T,
     tx: mpsc::Sender<T>,
+    day_filter: Option<Vec<Weekday>>,
 }
 
 impl<T> Daily<T>
 where
-    T: Send + Clone,
+    T: Send + Clone + Debug,
 {
-    fn new(time: NaiveTime, message: T, tx: mpsc::Sender<T>) -> Self {
+    fn new(
+        time: NaiveTime,
+        message: T,
+        tx: mpsc::Sender<T>,
+        day_filter: Option<Vec<Weekday>>,
+    ) -> Self {
         Self {
             last_tick: Local::now(),
             time,
             message,
             tx,
+            day_filter,
         }
     }
 
@@ -32,9 +40,22 @@ where
             ticker.tick().await;
             let now = Local::now();
             if time_is_between(self.last_tick, now, self.time) {
-                if let Err(_) = self.tx.send(self.message.clone()).await {
-                    // receiver is dropped, no need to continue
-                    break;
+                if self
+                    .day_filter
+                    .as_ref()
+                    .is_some_and(|v| v.contains(&now.weekday()))
+                    || self.day_filter.is_none()
+                {
+                    debug!("run daily {:?} triggered", self.message);
+                    if let Err(_) = self.tx.send(self.message.clone()).await {
+                        // receiver is dropped, no need to continue
+                        break;
+                    }
+                } else {
+                    debug!(
+                        "run daily {:?} skipped due to weekday mismatch",
+                        self.message
+                    );
                 }
             }
             self.last_tick = now;
@@ -68,11 +89,16 @@ where
     }
 }
 
-pub fn run_daily<T>(message: T, message_tx: mpsc::Sender<T>, time: NaiveTime) -> JoinHandle<()>
+pub fn run_daily<T>(
+    message: T,
+    message_tx: mpsc::Sender<T>,
+    time: NaiveTime,
+    day_filter: Option<Vec<Weekday>>,
+) -> JoinHandle<()>
 where
-    T: Send + Sync + Clone + 'static,
+    T: Send + Sync + Clone + Debug + 'static,
 {
-    let mut d = Daily::new(time, message, message_tx);
+    let mut d = Daily::new(time, message, message_tx, day_filter);
     tokio::spawn(async move {
         d.run().await;
     })

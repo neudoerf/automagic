@@ -75,8 +75,8 @@ async fn rx_loop(
                                     }
                                 }
                             }
-                            Message::Ping(_) => debug!("recieved ping"),
-                            Message::Pong(_) => debug!("received pong"),
+                            Message::Ping(_) => trace!("recieved ping"),
+                            Message::Pong(_) => trace!("received pong"),
                             Message::Close(_) => {
                                 info!("connection closed by server");
                                 break;

@@ -7,7 +7,7 @@ use futures_util::{
 use tokio::{net::TcpStream, sync::mpsc, task::JoinHandle, time::timeout};
 use tokio_tungstenite::{connect_async, tungstenite::Message, MaybeTlsStream, WebSocketStream};
 use tokio_util::sync::CancellationToken;
-use tracing::{debug, error, info, trace, warn};
+use tracing::{error, info, trace, warn};
 use url::Url;
 
 use crate::{

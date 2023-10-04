@@ -98,6 +98,13 @@ impl Automagic {
                 error!("auth invalid");
             }
             HassResponse::Event(e) => {
+                if e.event.event_type == "state_changed" {
+                    let new_state = e.event.data.new_state.clone();
+                    let entity_id = e.event.data.entity_id.clone();
+                    if let Some(state) = new_state {
+                        self.states.insert(entity_id, state);
+                    }
+                }
                 let _ = self.event_tx.send(e.event.data);
             }
             HassResponse::Result(r) => {

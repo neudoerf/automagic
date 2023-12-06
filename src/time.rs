@@ -47,7 +47,7 @@ where
                     || self.day_filter.is_none()
                 {
                     debug!("run daily {:?} triggered", self.message);
-                    if let Err(_) = self.tx.send(self.message.clone()).await {
+                    if self.tx.send(self.message.clone()).await.is_err() {
                         // receiver is dropped, no need to continue
                         break;
                     }
@@ -112,7 +112,7 @@ where
     tokio::spawn(async move {
         loop {
             i.tick().await;
-            if let Err(_) = message_tx.send(message.clone()).await {
+            if message_tx.send(message.clone()).await.is_err() {
                 break;
             }
         }

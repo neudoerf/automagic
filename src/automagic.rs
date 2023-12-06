@@ -109,20 +109,15 @@ impl Automagic {
             }
             HassResponse::Result(r) => {
                 if self.get_states_id.is_some_and(|id| id == r.id) {
-                    match r.result {
-                        Some(Value::Array(states)) => {
-                            debug!("received states");
-                            for state in states {
-                                if let Ok(state) =
-                                    serde_json::from_value::<HassEntity>(state.clone())
-                                {
-                                    self.states.insert(state.entity_id.clone(), state);
-                                } else {
-                                    warn!("unable to parse state: {:#?}", state);
-                                }
+                    if let Some(Value::Array(states)) = r.result {
+                        debug!("received states");
+                        for state in states {
+                            if let Ok(state) = serde_json::from_value::<HassEntity>(state.clone()) {
+                                self.states.insert(state.entity_id.clone(), state);
+                            } else {
+                                warn!("unable to parse state: {:#?}", state);
                             }
                         }
-                        _ => {}
                     }
                     self.get_states_id = None;
                 }
@@ -244,10 +239,8 @@ impl AutomagicHandle {
                 domain: domain.to_owned(),
                 service: service.to_owned(),
                 service_data,
-                target: target.and_then(|t| {
-                    Some(Target {
-                        entity_id: t.to_owned(),
-                    })
+                target: target.map(|t| Target {
+                    entity_id: t.to_owned(),
                 }),
             })
             .await
@@ -255,13 +248,14 @@ impl AutomagicHandle {
 
     pub async fn get_state(&self, entityid: &str) -> Option<HassEntity> {
         let (tx, rx) = oneshot::channel();
-        if let Ok(_) = self
+        if self
             .tx
             .send(AutomagicMessage::GetState {
                 entity_id: entityid.to_owned(),
                 tx,
             })
             .await
+            .is_ok()
         {
             rx.await.unwrap_or(None)
         } else {

@@ -25,8 +25,8 @@ impl Config {
 
 fn get(t: &Table, k: &str) -> String {
     t.get(k)
-        .expect(&format!("config does not contain {}", k))
+        .unwrap_or_else(|| panic!("config does not contain {}", k))
         .as_str()
-        .expect(&format!("unable to parse {}", k))
+        .unwrap_or_else(|| panic!("unable to parse {}", k))
         .to_owned()
 }

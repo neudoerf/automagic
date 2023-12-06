@@ -28,7 +28,7 @@ async fn tx_loop(
                 match req {
                     Ok(Some(request)) => {
                         if let Ok(message) = serde_json::to_string(&request) {
-                            if let Err(_) = tx.send(Message::Text(message)).await {
+                            if tx.send(Message::Text(message)).await.is_err() {
                                 error!("failed to send message to websocket, closing connection");
                                 break;
                             }
@@ -41,7 +41,7 @@ async fn tx_loop(
                         break;
                     }
                     Err(_) => {
-                        if let Err(_) = tx.send(Message::Ping(vec![])).await {
+                        if tx.send(Message::Ping(vec![])).await.is_err() {
                             error!("failed to send ping, closing connection");
                             break;
                         }
@@ -130,7 +130,7 @@ pub(crate) fn start(
     url_str: String,
     resp_tx: mpsc::Sender<HassResponse>,
 ) -> (mpsc::Sender<HassRequest>, JoinHandle<()>) {
-    let url = Url::parse(&url_str).expect(&format!("failed to parse url: {}", url_str));
+    let url = Url::parse(&url_str).unwrap_or_else(|_| panic!("failed to parse url: {}", url_str));
 
     // create an intermediate request channel allows us to reconnect the websocket without getting a
     // new sender upstream

@@ -48,6 +48,7 @@ async fn tx_loop(
                     }
                 }
             }
+            _ = ct.cancelled() => { break; }
         }
     }
     ct.cancel();

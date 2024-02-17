@@ -4,13 +4,13 @@ use automagic::{
     automation::{self, Automation},
     model::EventData,
     time::run_in,
-    AutomagicHandle,
+    HassHandle,
 };
 use tokio::{sync::mpsc, task::JoinHandle};
 use tracing::{error, Level};
 
 struct TestAutomation {
-    automagic: AutomagicHandle,
+    automagic: HassHandle,
     message_tx: mpsc::Sender<TestMessage>,
     trigger: String,
     entity: String,
@@ -22,7 +22,7 @@ enum TestMessage {
 }
 
 impl TestAutomation {
-    async fn start(automagic: AutomagicHandle, trigger: String, entity: String) -> JoinHandle<()> {
+    async fn start(automagic: HassHandle, trigger: String, entity: String) -> JoinHandle<()> {
         let (message_tx, message_rx) = mpsc::channel(1);
         automation::new(
             TestAutomation {
@@ -89,7 +89,7 @@ impl Automation for TestAutomation {
         self.message_tx.clone()
     }
 
-    fn get_automagic(&self) -> AutomagicHandle {
+    fn get_automagic(&self) -> HassHandle {
         self.automagic.clone()
     }
 }

@@ -4,7 +4,7 @@ use tokio::{
 };
 
 use crate::{
-    automagic::{AutomagicHandle, AutomagicMessage},
+    automagic::{HassHandle, HassMessage},
     model::EventData,
 };
 
@@ -20,7 +20,7 @@ pub trait Automation {
 
     fn get_message_tx(&self) -> mpsc::Sender<Self::AutomationMessage>;
 
-    fn get_automagic(&self) -> AutomagicHandle;
+    fn get_automagic(&self) -> HassHandle;
 }
 
 struct AutomagicAutomation<T>
@@ -65,7 +65,7 @@ pub async fn new<T: Automation + Send + 'static>(
     message_rx: mpsc::Receiver<T::AutomationMessage>,
 ) -> JoinHandle<()> {
     let (tx, rx) = oneshot::channel();
-    let cmd = AutomagicMessage::SubscribeEvents { tx };
+    let cmd = HassMessage::SubscribeEvents { tx };
     let automagic = automation.get_automagic();
     automagic
         .send(cmd)

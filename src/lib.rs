@@ -6,7 +6,7 @@ pub mod model;
 pub mod time;
 
 pub use automagic::start;
-pub use automagic::AutomagicHandle;
-pub use automagic::AutomagicMessage;
+pub use automagic::HassHandle;
+pub use automagic::HassMessage;
 
 pub(crate) const CHANNEL_SIZE: usize = 10;

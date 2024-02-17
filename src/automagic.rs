@@ -17,7 +17,7 @@ use crate::{
 const API_WEBSOCKET: &str = "/api/websocket";
 
 #[derive(Debug)]
-pub enum AutomagicMessage {
+pub enum HassMessage {
     CallService {
         domain: String,
         service: String,
@@ -33,12 +33,12 @@ pub enum AutomagicMessage {
     },
 }
 
-struct Automagic {
+struct Hass {
     config: Config,
 
     req_tx: mpsc::Sender<HassRequest>,
     event_tx: broadcast::Sender<EventData>,
-    msg_rx: mpsc::Receiver<AutomagicMessage>,
+    msg_rx: mpsc::Receiver<HassMessage>,
     resp_rx: mpsc::Receiver<HassResponse>,
 
     id: u64,
@@ -46,17 +46,17 @@ struct Automagic {
     get_states_id: Option<u64>,
 }
 
-impl Automagic {
+impl Hass {
     fn new(
         config: Config,
         req_tx: mpsc::Sender<HassRequest>,
-        msg_rx: mpsc::Receiver<AutomagicMessage>,
+        msg_rx: mpsc::Receiver<HassMessage>,
         resp_rx: mpsc::Receiver<HassResponse>,
     ) -> Self {
         // need to be careful with small channel sizes as a burst of events could flood the channel
         // and cause events to be pushed out the end of the channel before automations can process them
         let (event_tx, _) = broadcast::channel(cmp::max(CHANNEL_SIZE, 32));
-        Automagic {
+        Hass {
             config,
             req_tx,
             event_tx,
@@ -126,10 +126,10 @@ impl Automagic {
         }
     }
 
-    async fn handle_message(&mut self, message: AutomagicMessage) {
+    async fn handle_message(&mut self, message: HassMessage) {
         trace!("{:?}", message);
         match message {
-            AutomagicMessage::CallService {
+            HassMessage::CallService {
                 domain,
                 service,
                 service_data,
@@ -138,10 +138,10 @@ impl Automagic {
                 self.call_service(domain, service, service_data, target)
                     .await;
             }
-            AutomagicMessage::SubscribeEvents { tx } => {
+            HassMessage::SubscribeEvents { tx } => {
                 let _ = tx.send(self.event_tx.subscribe());
             }
-            AutomagicMessage::GetState { entity_id, tx } => {
+            HassMessage::GetState { entity_id, tx } => {
                 let _ = tx.send(self.get_state(entity_id));
             }
         };
@@ -211,19 +211,19 @@ impl Automagic {
 }
 
 #[derive(Clone)]
-pub struct AutomagicHandle {
-    tx: mpsc::Sender<AutomagicMessage>,
+pub struct HassHandle {
+    tx: mpsc::Sender<HassMessage>,
 }
 
-impl AutomagicHandle {
-    fn new(tx: mpsc::Sender<AutomagicMessage>) -> Self {
+impl HassHandle {
+    fn new(tx: mpsc::Sender<HassMessage>) -> Self {
         Self { tx }
     }
 
     pub async fn send(
         &self,
-        m: AutomagicMessage,
-    ) -> Result<(), mpsc::error::SendError<AutomagicMessage>> {
+        m: HassMessage,
+    ) -> Result<(), mpsc::error::SendError<HassMessage>> {
         self.tx.send(m).await
     }
 
@@ -233,9 +233,9 @@ impl AutomagicHandle {
         service: &str,
         service_data: Option<Value>,
         target: Option<&str>,
-    ) -> Result<(), mpsc::error::SendError<AutomagicMessage>> {
+    ) -> Result<(), mpsc::error::SendError<HassMessage>> {
         self.tx
-            .send(AutomagicMessage::CallService {
+            .send(HassMessage::CallService {
                 domain: domain.to_owned(),
                 service: service.to_owned(),
                 service_data,
@@ -250,7 +250,7 @@ impl AutomagicHandle {
         let (tx, rx) = oneshot::channel();
         if self
             .tx
-            .send(AutomagicMessage::GetState {
+            .send(HassMessage::GetState {
                 entity_id: entityid.to_owned(),
                 tx,
             })
@@ -264,7 +264,7 @@ impl AutomagicHandle {
     }
 }
 
-pub fn start(config_path: &str) -> (AutomagicHandle, JoinHandle<()>) {
+pub fn start(config_path: &str) -> (HassHandle, JoinHandle<()>) {
     let config = Config::new(config_path);
 
     let (auto_tx, auto_rx) = mpsc::channel(CHANNEL_SIZE);
@@ -273,12 +273,12 @@ pub fn start(config_path: &str) -> (AutomagicHandle, JoinHandle<()>) {
     let (req_tx, hassclient_task) =
         hass_client::start(format!("{}{}", config.url.clone(), API_WEBSOCKET), resp_tx);
 
-    let mut automagic = Automagic::new(config, req_tx, auto_rx, resp_rx);
+    let mut automagic = Hass::new(config, req_tx, auto_rx, resp_rx);
     let automagic_task = tokio::spawn(async move { automagic.run().await });
 
     let task = tokio::spawn(async move {
         let _ = tokio::join!(hassclient_task, automagic_task);
     });
 
-    (AutomagicHandle::new(auto_tx), task)
+    (HassHandle::new(auto_tx), task)
 }

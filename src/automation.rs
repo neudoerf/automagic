@@ -8,8 +8,8 @@ use crate::{
     model::EventData,
 };
 
-#[async_trait::async_trait]
-pub trait Automation {
+#[trait_variant::make(Automation: Send)]
+pub trait LocalAutomation {
     type AutomationMessage: Send;
 
     fn init(&mut self);

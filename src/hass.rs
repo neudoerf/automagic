@@ -220,11 +220,12 @@ impl HassHandle {
         Self { tx }
     }
 
-    pub async fn send(
-        &self,
-        m: HassMessage,
-    ) -> Result<(), mpsc::error::SendError<HassMessage>> {
-        self.tx.send(m).await
+    pub async fn send(&self, m: HassMessage) -> Result<(), mpsc::error::SendError<HassMessage>> {
+        let res = self.tx.send(m).await;
+        if res.is_err() {
+            error!("failed to send to hass");
+        }
+        res
     }
 
     pub async fn call_service(
@@ -234,16 +235,15 @@ impl HassHandle {
         service_data: Option<Value>,
         target: Option<&str>,
     ) -> Result<(), mpsc::error::SendError<HassMessage>> {
-        self.tx
-            .send(HassMessage::CallService {
-                domain: domain.to_owned(),
-                service: service.to_owned(),
-                service_data,
-                target: target.map(|t| Target {
-                    entity_id: t.to_owned(),
-                }),
-            })
-            .await
+        self.send(HassMessage::CallService {
+            domain: domain.to_owned(),
+            service: service.to_owned(),
+            service_data,
+            target: target.map(|t| Target {
+                entity_id: t.to_owned(),
+            }),
+        })
+        .await
     }
 
     pub async fn get_state(&self, entityid: &str) -> Option<HassEntity> {
@@ -273,11 +273,11 @@ pub fn start(config_path: &str) -> (HassHandle, JoinHandle<()>) {
     let (req_tx, hassclient_task) =
         hass_client::start(format!("{}{}", config.url.clone(), API_WEBSOCKET), resp_tx);
 
-    let mut automagic = Hass::new(config, req_tx, auto_rx, resp_rx);
-    let automagic_task = tokio::spawn(async move { automagic.run().await });
+    let mut hass = Hass::new(config, req_tx, auto_rx, resp_rx);
+    let hass_task = tokio::spawn(async move { hass.run().await });
 
     let task = tokio::spawn(async move {
-        let _ = tokio::join!(hassclient_task, automagic_task);
+        let _ = tokio::join!(hassclient_task, hass_task);
     });
 
     (HassHandle::new(auto_tx), task)

@@ -38,7 +38,6 @@ impl TestAutomation {
     }
 }
 
-#[async_trait::async_trait]
 impl Automation for TestAutomation {
     type AutomationMessage = TestMessage;
 
@@ -89,7 +88,7 @@ impl Automation for TestAutomation {
         self.message_tx.clone()
     }
 
-    fn get_automagic(&self) -> HassHandle {
+    fn get_hass(&self) -> HassHandle {
         self.automagic.clone()
     }
 }

@@ -1,3 +1,5 @@
+use std::collections::HashMap;
+
 use serde::Deserialize;
 use serde_json::Value;
 
@@ -56,7 +58,7 @@ pub struct HassEntity {
     pub state: String,
     pub last_changed: String,
     pub last_updated: String,
-    pub attributes: Value,
+    pub attributes: HashMap<String, Value>,
     pub context: Context,
 }
 

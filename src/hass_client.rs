@@ -8,7 +8,6 @@ use tokio::{net::TcpStream, sync::mpsc, task::JoinHandle, time::timeout};
 use tokio_tungstenite::{connect_async, tungstenite::Message, MaybeTlsStream, WebSocketStream};
 use tokio_util::sync::CancellationToken;
 use tracing::{error, info, trace, warn};
-use url::Url;
 
 use crate::{
     model::{HassRequest, HassResponse},
@@ -28,7 +27,7 @@ async fn tx_loop(
                 match req {
                     Ok(Some(request)) => {
                         if let Ok(message) = serde_json::to_string(&request) {
-                            if tx.send(Message::Text(message)).await.is_err() {
+                            if tx.send(Message::Text(message.into())).await.is_err() {
                                 error!("failed to send message to websocket, closing connection");
                                 break;
                             }
@@ -41,7 +40,7 @@ async fn tx_loop(
                         break;
                     }
                     Err(_) => {
-                        if tx.send(Message::Ping(vec![])).await.is_err() {
+                        if tx.send(Message::Ping(vec![].into())).await.is_err() {
                             error!("failed to send ping, closing connection");
                             break;
                         }
@@ -131,8 +130,6 @@ pub(crate) fn start(
     url_str: String,
     resp_tx: mpsc::Sender<HassResponse>,
 ) -> (mpsc::Sender<HassRequest>, JoinHandle<()>) {
-    let url = Url::parse(&url_str).unwrap_or_else(|_| panic!("failed to parse url: {}", url_str));
-
     // create an intermediate request channel allows us to reconnect the websocket without getting a
     // new sender upstream
     let (ireq_tx, mut ireq_rx) = mpsc::channel(1);
@@ -140,8 +137,8 @@ pub(crate) fn start(
         loop {
             let ct = CancellationToken::new();
 
-            if let Ok((client, _)) = connect_async(url.clone()).await {
-                info!("connected to: {}", url);
+            if let Ok((client, _)) = connect_async(&url_str).await {
+                info!("connected to: {}", &url_str);
                 let (req_tx, ws_task) = start_loops(client, resp_tx.clone());
 
                 // spawn the request forwarder

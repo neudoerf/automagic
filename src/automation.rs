@@ -2,6 +2,7 @@ use tokio::{
     sync::{broadcast, mpsc, oneshot},
     task::{self, JoinHandle},
 };
+use tracing::info;
 
 use crate::{
     hass::{HassHandle, HassMessage},
@@ -56,6 +57,11 @@ impl<T: Automation + Send> AutomagicAutomation<T> {
                     self.automation.handle_message(message).await
                 }
             }
+            info!(
+                "event len: {}, message cap: {}",
+                self.event_rx.len(),
+                self.message_rx.capacity()
+            );
         }
     }
 }

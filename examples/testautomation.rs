@@ -17,6 +17,7 @@ struct TestAutomation {
     handle: Option<JoinHandle<()>>,
 }
 
+#[derive(Debug)]
 enum TestMessage {
     LightOff,
 }

@@ -65,11 +65,11 @@ where
 
 pub fn run_in<T>(message: T, tx: mpsc::Sender<T>, delay: Duration) -> JoinHandle<()>
 where
-    T: Send + 'static,
+    T: Send + Debug + 'static,
 {
     debug!("run in: duration: {:?}", delay);
     tokio::task::Builder::new()
-        .name(&format!("run_in: {:?}", delay))
+        .name(&format!("run_in: {:?}, {:?}", message, delay))
         .spawn(async move {
             tokio::time::sleep(delay).await;
             let _ = tx.send(message).await;
@@ -79,7 +79,7 @@ where
 
 pub fn run_at<T>(message: T, tx: mpsc::Sender<T>, datetime: DateTime<Local>) -> JoinHandle<()>
 where
-    T: Send + 'static,
+    T: Send + Debug + 'static,
 {
     if let Ok(d) = (datetime - Local::now()).to_std() {
         run_in(message, tx, d)

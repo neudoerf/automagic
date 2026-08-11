@@ -2,7 +2,7 @@ use tokio::{
     sync::{broadcast, mpsc, oneshot},
     task::{self, JoinHandle},
 };
-use tracing::info;
+use tracing::error;
 
 use crate::{
     hass::{HassHandle, HassMessage},
@@ -50,18 +50,19 @@ impl<T: Automation + Send> AutomagicAutomation<T> {
         self.automation.init();
         loop {
             tokio::select! {
-                Ok(event) = self.event_rx.recv() => {
-                    self.automation.handle_event(event).await
+                event_rx = self.event_rx.recv() => {
+                    match event_rx {
+                        Ok(event) => self.automation.handle_event(event).await,
+                        Err(err) => error!("event_rx error: {}", err),
+                    }
                 }
-                Some(message) = self.message_rx.recv() => {
-                    self.automation.handle_message(message).await
+                message_rx = self.message_rx.recv() => {
+                    match message_rx {
+                        Some(message) => self.automation.handle_message(message).await,
+                        None => error!("message channel closed"),
+                    }
                 }
             }
-            info!(
-                "event len: {}, message cap: {}",
-                self.event_rx.len(),
-                self.message_rx.capacity()
-            );
         }
     }
 }

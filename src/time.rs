@@ -68,10 +68,13 @@ where
     T: Send + 'static,
 {
     debug!("run in: duration: {:?}", delay);
-    tokio::spawn(async move {
-        tokio::time::sleep(delay).await;
-        let _ = tx.send(message).await;
-    })
+    tokio::task::Builder::new()
+        .name(&format!("run_in: {:?}", delay))
+        .spawn(async move {
+            tokio::time::sleep(delay).await;
+            let _ = tx.send(message).await;
+        })
+        .expect("failed to spawn run_in")
 }
 
 pub fn run_at<T>(message: T, tx: mpsc::Sender<T>, datetime: DateTime<Local>) -> JoinHandle<()>
@@ -98,25 +101,31 @@ pub fn run_daily<T>(
 where
     T: Send + Sync + Clone + Debug + 'static,
 {
-    let mut d = Daily::new(time, message, message_tx, day_filter);
-    tokio::spawn(async move {
-        d.run().await;
-    })
+    let mut d = Daily::new(time, message.clone(), message_tx, day_filter);
+    tokio::task::Builder::new()
+        .name(&format!("run_daily: {:?}", message))
+        .spawn(async move {
+            d.run().await;
+        })
+        .expect("failed to spawn run_daily")
 }
 
 pub fn run_interval<T>(message: T, message_tx: mpsc::Sender<T>, period: Duration) -> JoinHandle<()>
 where
-    T: Send + Sync + Clone + 'static,
+    T: Send + Sync + Clone + Debug + 'static,
 {
     let mut i = interval(period);
-    tokio::spawn(async move {
-        loop {
-            i.tick().await;
-            if message_tx.send(message.clone()).await.is_err() {
-                break;
+    tokio::task::Builder::new()
+        .name(&format!("run_interval: {:?} @{:?}", message, period))
+        .spawn(async move {
+            loop {
+                i.tick().await;
+                if message_tx.send(message.clone()).await.is_err() {
+                    break;
+                }
             }
-        }
-    })
+        })
+        .expect("failed to spawn run_interval")
 }
 
 fn time_is_between(start: DateTime<Local>, end: DateTime<Local>, time: NaiveTime) -> bool {

@@ -274,11 +274,17 @@ pub fn start(config_path: &str) -> (HassHandle, JoinHandle<()>) {
         hass_client::start(format!("{}{}", config.url.clone(), API_WEBSOCKET), resp_tx);
 
     let mut hass = Hass::new(config, req_tx, auto_rx, resp_rx);
-    let hass_task = tokio::spawn(async move { hass.run().await });
+    let hass_task = tokio::task::Builder::new()
+        .name("HASS")
+        .spawn(async move { hass.run().await })
+        .expect("failed to spawn hass task");
 
-    let task = tokio::spawn(async move {
-        let _ = tokio::join!(hassclient_task, hass_task);
-    });
+    let task = tokio::task::Builder::new()
+        .name("HASS Client")
+        .spawn(async move {
+            let _ = tokio::join!(hassclient_task, hass_task);
+        })
+        .expect("failed to spawn hass client");
 
     (HassHandle::new(auto_tx), task)
 }

@@ -111,18 +111,27 @@ fn start_loops(
     let (ws_tx, ws_rx) = ws.split();
     let (req_tx, req_rx) = mpsc::channel(CHANNEL_SIZE);
 
-    let handle = tokio::spawn({
-        let ct = CancellationToken::new();
-        async move {
-            let tx_handle = tokio::spawn({
-                let ct = ct.clone();
-                async move { tx_loop(req_rx, ws_tx, ct).await }
-            });
-            let rx_handle = tokio::spawn(async { rx_loop(ws_rx, resp_tx, ct).await });
+    let handle = tokio::task::Builder::new()
+        .name("HassClientLoops")
+        .spawn({
+            let ct = CancellationToken::new();
+            async move {
+                let tx_handle = tokio::task::Builder::new()
+                    .name("tx_loop")
+                    .spawn({
+                        let ct = ct.clone();
+                        async move { tx_loop(req_rx, ws_tx, ct).await }
+                    })
+                    .expect("failed to spawn tx loop");
+                let rx_handle = tokio::task::Builder::new()
+                    .name("rx_loop")
+                    .spawn(async { rx_loop(ws_rx, resp_tx, ct).await })
+                    .expect("failed to spawn rx loop");
 
-            let _ = tokio::join!(tx_handle, rx_handle);
-        }
-    });
+                let _ = tokio::join!(tx_handle, rx_handle);
+            }
+        })
+        .expect("failed to spawn client loops");
     (req_tx, handle)
 }
 

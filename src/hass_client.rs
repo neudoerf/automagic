@@ -151,24 +151,27 @@ pub(crate) fn start(
                 let (req_tx, ws_task) = start_loops(client, resp_tx.clone());
 
                 // spawn the request forwarder
-                let req_task = tokio::spawn({
-                    let ct = ct.clone();
-                    async move {
-                        loop {
-                            tokio::select! {
-                                req = ireq_rx.recv() => {
-                                    if let Some(req) = req {
-                                        let _ = req_tx.send(req).await;
-                                    } else {
-                                        break;
+                let req_task = tokio::task::Builder::new()
+                    .name("RequestForwarder")
+                    .spawn({
+                        let ct = ct.clone();
+                        async move {
+                            loop {
+                                tokio::select! {
+                                    req = ireq_rx.recv() => {
+                                        if let Some(req) = req {
+                                            let _ = req_tx.send(req).await;
+                                        } else {
+                                            break;
+                                        }
                                     }
+                                    _ = ct.cancelled() => {break;}
                                 }
-                                _ = ct.cancelled() => {break;}
                             }
+                            ireq_rx
                         }
-                        ireq_rx
-                    }
-                });
+                    })
+                    .expect("failed to spawn request forwareder");
                 let _ = ws_task.await;
                 ct.cancel();
                 if let Ok(receiver) = req_task.await {

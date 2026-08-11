@@ -142,49 +142,52 @@ pub(crate) fn start(
     // create an intermediate request channel allows us to reconnect the websocket without getting a
     // new sender upstream
     let (ireq_tx, mut ireq_rx) = mpsc::channel(1);
-    let handle = tokio::spawn(async move {
-        loop {
-            let ct = CancellationToken::new();
+    let handle = tokio::task::Builder::new()
+        .name("Client Main")
+        .spawn(async move {
+            loop {
+                let ct = CancellationToken::new();
 
-            if let Ok((client, _)) = connect_async(&url_str).await {
-                info!("connected to: {}", &url_str);
-                let (req_tx, ws_task) = start_loops(client, resp_tx.clone());
+                if let Ok((client, _)) = connect_async(&url_str).await {
+                    info!("connected to: {}", &url_str);
+                    let (req_tx, ws_task) = start_loops(client, resp_tx.clone());
 
-                // spawn the request forwarder
-                let req_task = tokio::task::Builder::new()
-                    .name("RequestForwarder")
-                    .spawn({
-                        let ct = ct.clone();
-                        async move {
-                            loop {
-                                tokio::select! {
-                                    req = ireq_rx.recv() => {
-                                        if let Some(req) = req {
-                                            let _ = req_tx.send(req).await;
-                                        } else {
-                                            break;
+                    // spawn the request forwarder
+                    let req_task = tokio::task::Builder::new()
+                        .name("RequestForwarder")
+                        .spawn({
+                            let ct = ct.clone();
+                            async move {
+                                loop {
+                                    tokio::select! {
+                                        req = ireq_rx.recv() => {
+                                            if let Some(req) = req {
+                                                let _ = req_tx.send(req).await;
+                                            } else {
+                                                break;
+                                            }
                                         }
+                                        _ = ct.cancelled() => {break;}
                                     }
-                                    _ = ct.cancelled() => {break;}
                                 }
+                                ireq_rx
                             }
-                            ireq_rx
-                        }
-                    })
-                    .expect("failed to spawn request forwareder");
-                let _ = ws_task.await;
-                ct.cancel();
-                if let Ok(receiver) = req_task.await {
-                    ireq_rx = receiver;
+                        })
+                        .expect("failed to spawn request forwareder");
+                    let _ = ws_task.await;
+                    ct.cancel();
+                    if let Ok(receiver) = req_task.await {
+                        ireq_rx = receiver;
+                    } else {
+                        error!("request forwarder task returned with error");
+                        break;
+                    }
                 } else {
-                    error!("request forwarder task returned with error");
-                    break;
+                    warn!("failed to connect to {}", url_str);
                 }
-            } else {
-                warn!("failed to connect to {}", url_str);
+                tokio::time::sleep(Duration::from_secs(5)).await;
             }
-            tokio::time::sleep(Duration::from_secs(5)).await;
-        }
-    });
+        })
+        .expect("failed to spawn client main");
     (ireq_tx, handle)
 }

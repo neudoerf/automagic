@@ -32,6 +32,7 @@ impl TestAutomation {
                 entity,
                 handle: None,
             },
+            "TestAutomation",
             message_rx,
         )
         .await

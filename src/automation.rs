@@ -1,6 +1,6 @@
 use tokio::{
     sync::{broadcast, mpsc, oneshot},
-    task::JoinHandle,
+    task::{self, JoinHandle},
 };
 
 use crate::{
@@ -62,6 +62,7 @@ impl<T: Automation + Send> AutomagicAutomation<T> {
 
 pub async fn new<T: Automation + Send + 'static>(
     automation: T,
+    name: &str,
     message_rx: mpsc::Receiver<T::AutomationMessage>,
 ) -> JoinHandle<()> {
     let (tx, rx) = oneshot::channel();
@@ -74,5 +75,8 @@ pub async fn new<T: Automation + Send + 'static>(
     let event_rx = rx.await.expect("failed to receive event receiver");
 
     let mut auto = AutomagicAutomation::new(automation, event_rx, message_rx);
-    tokio::spawn(async move { auto.run().await })
+    task::Builder::new()
+        .name(name)
+        .spawn(async move { auto.run().await })
+        .expect(&format!("failed to spawn automation: {}", name))
 }

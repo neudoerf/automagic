@@ -55,7 +55,7 @@ impl Hass {
     ) -> Self {
         // need to be careful with small channel sizes as a burst of events could flood the channel
         // and cause events to be pushed out the end of the channel before automations can process them
-        let (event_tx, _) = broadcast::channel(cmp::max(CHANNEL_SIZE, 32));
+        let (event_tx, _) = broadcast::channel(cmp::max(CHANNEL_SIZE, 64));
         Hass {
             config,
             req_tx,
